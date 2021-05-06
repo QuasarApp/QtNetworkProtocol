@@ -9,12 +9,12 @@
 #include "dbaddress.h"
 #include <QTcpSocket>
 #include <hostaddress.h>
-
+#include <QThread>
 namespace QH {
 
 
 BaseNodeInfo::BaseNodeInfo(QAbstractSocket *tcp, const HostAddress* address):
-    AbstractNodeInfo(tcp, address){}
+    AbstractNodeInfo(QThread::currentThread(), tcp, address){}
 
 BaseNodeInfo::~BaseNodeInfo() = default;
 

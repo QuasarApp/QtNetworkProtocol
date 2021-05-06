@@ -360,7 +360,7 @@ QSslConfiguration AbstractNode::selfSignedSslConfiguration(const SslSrtData & ss
 
 AbstractNodeInfo *AbstractNode::createNodeInfo(QAbstractSocket *socket,
                                                const HostAddress* clientAddress) const {
-    return new AbstractNodeInfo(socket, clientAddress);
+    return new AbstractNodeInfo(_senderThread, socket, clientAddress);
 }
 
 bool AbstractNode::registerSocket(QAbstractSocket *socket, const HostAddress* clientAddress) {
@@ -465,7 +465,7 @@ ParserResult AbstractNode::parsePackage(const QSharedPointer<AbstractData> &pkg,
     return ParserResult::NotProcessed;
 }
 
-bool AbstractNode::sendPackage(const Package &pkg, QAbstractSocket *target) const {
+bool AbstractNode::sendPackage(const Package &pkg, AbstractNodeInfo *target) const {
     if (!pkg.isValid()) {
         return false;
     }
@@ -482,7 +482,7 @@ bool AbstractNode::sendPackage(const Package &pkg, QAbstractSocket *target) cons
         return false;
     }
 
-    return _dataSender->sendData(pkg.toBytes(), target, true);
+    return target->sendData(pkg.toBytes(), true);
 }
 
 unsigned int AbstractNode::sendData(AbstractData *resp,
@@ -524,7 +524,7 @@ unsigned int AbstractNode::sendData(const AbstractData *resp,
         return 0;
     }
 
-    if (!sendPackage(pkg, client->sct())) {
+    if (!sendPackage(pkg, client)) {
         QuasarAppUtils::Params::log("Response not sent!",
                                     QuasarAppUtils::Error);
         return 0;
@@ -768,15 +768,14 @@ void AbstractNode::avelableBytes(AbstractNodeInfo *sender) {
     int workIndex = 0;
     const int headerSize = sizeof(Header);
 
-    auto socket = sender->sct();
-    if (!socket) {
+    if (!sender->isValid()) {
         pkg.reset();
         hdrArray.clear();
         return;
     }
 
     // concat with old data of header.
-    const auto array = hdrArray + socket->readAll();
+    const auto array = hdrArray + sender->readAll();
     const int arraySize = array.size();
     hdrArray.clear();
 

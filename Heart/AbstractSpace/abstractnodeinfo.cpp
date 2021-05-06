@@ -11,24 +11,25 @@
 #include <QDataStream>
 #include <QHostInfo>
 #include <QMetaObject>
+#include <quasarapp.h>
 
 namespace QH {
 
-AbstractNodeInfo::AbstractNodeInfo(QAbstractSocket *sct,
-                                   const HostAddress *address) {
+AbstractNodeInfo::AbstractNodeInfo(QThread *thread, QAbstractSocket *sct,
+                                   const HostAddress *address):
+    Async(thread) {
     setSct(sct);
     if (address)
         setNetworkAddress(*address);
 
 }
 
-AbstractNodeInfo::~AbstractNodeInfo() {}
-
-QAbstractSocket *AbstractNodeInfo::sct() const {
-    return _sct;
+AbstractNodeInfo::~AbstractNodeInfo() {
 }
 
 void AbstractNodeInfo::removeSocket() {
+    QMutexLocker lock(&_sctMutex);
+
     if (_sct) {
         auto socketPtr = _sct;
         _sct = nullptr;
@@ -64,6 +65,8 @@ void AbstractNodeInfo::unBan() {
 void AbstractNodeInfo::setSct(QAbstractSocket *sct) {
 
     AbstractNodeInfo::removeSocket();
+
+    QMutexLocker lock(&_sctMutex);
 
     _sct = sct;
 
@@ -101,6 +104,37 @@ void AbstractNodeInfo::setSct(QAbstractSocket *sct) {
     }
 }
 
+bool AbstractNodeInfo::waitForConnected(int msec) const {
+    QMutexLocker lock(&_sctMutex);
+
+    if (!_sct)
+        return false;
+
+    return _sct->waitForConnected(msec);
+}
+
+QString AbstractNodeInfo::errorString() {
+    QMutexLocker lock(&_sctMutex);
+
+    if (!_sct)
+        return "";
+
+    return _sct->errorString();
+}
+
+bool AbstractNodeInfo::sendData(const QByteArray &array, bool await) {
+    return asyncLauncher(std::bind(&AbstractNodeInfo::sendPackagePrivate, this, array), await);
+}
+
+QByteArray AbstractNodeInfo::readAll() const {
+    QMutexLocker lock(&_sctMutex);
+
+    if (!_sct)
+        return "";
+
+    return _sct->readAll();
+}
+
 void AbstractNodeInfo::setIsLocal(bool isLocal) {
     _isLocal = isLocal;
 }
@@ -123,6 +157,20 @@ bool AbstractNodeInfo::confirmData() const {
     return _status != NodeCoonectionStatus::NotConnected;
 }
 
+bool AbstractNodeInfo::sendPackagePrivate(QByteArray array) const {
+    QMutexLocker lock(&_sctMutex);
+
+    if (!_sct)
+        return false;
+
+    if (array.size() != _sct->write(array)) {
+        QuasarAppUtils::Params::log("not writed data to socket", QuasarAppUtils::Error);
+        return false;
+    }
+
+    return true;
+}
+
 void AbstractNodeInfo::updateConfirmStatus() {
     if (confirmData())
         setStatus(NodeCoonectionStatus::Confirmed);
@@ -133,7 +181,9 @@ bool AbstractNodeInfo::isLocal() const {
 }
 
 HostAddress AbstractNodeInfo::networkAddress() const {
-    if (isValid() && _sct->isValid())
+    QMutexLocker lock(&_sctMutex);
+
+    if (_sct && _sct->isValid())
         return HostAddress{_sct->peerAddress(), _sct->peerPort()};
 
     return _networkAddress;
@@ -176,6 +226,7 @@ void AbstractNodeInfo::setTrust(int trust) {
 }
 
 bool AbstractNodeInfo::isValid() const {
+    QMutexLocker lock(&_sctMutex);
     return _sct;
 }
 

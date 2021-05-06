@@ -330,7 +330,7 @@ protected:
      * @note All packages sendets on the sender threaed. But thread of the node is wait for sends result.
      *  This is done that allthe data that is sent when node are dissconected come without fail.
      */
-    virtual bool sendPackage(const Package &pkg, QAbstractSocket *target) const;
+    virtual bool sendPackage(const Package &pkg, AbstractNodeInfo *target) const;
 
     /**
      * @brief sendData This pakcage send data package to address and prepare object to sending.

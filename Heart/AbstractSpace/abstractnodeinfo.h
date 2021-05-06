@@ -9,7 +9,9 @@
 #define ABSTRACTNODEINFO_H
 #include "hostaddress.h"
 #include "heart_global.h"
+#include "async.h"
 
+#include <QMutex>
 #include <hostaddress.h>
 
 
@@ -61,7 +63,7 @@ uint qHash(NodeCoonectionStatus status);
  * All node Info classes must be initialized in the AbstractNode::createNodeInfo methods.
  * This implementation of nodeInf contains only trust of node and network socket.
  */
-class HEARTSHARED_EXPORT AbstractNodeInfo: public QObject
+class HEARTSHARED_EXPORT AbstractNodeInfo: public Async
 {
     Q_OBJECT
 public:
@@ -71,19 +73,14 @@ public:
      * @param sct Socket of connection
      * @param address - Address of socket
      */
-    AbstractNodeInfo(QAbstractSocket *sct = nullptr,
+    AbstractNodeInfo(QThread *thread,
+                     QAbstractSocket *sct = nullptr,
                      const HostAddress* address = nullptr);
 
     /**
      * @brief ~AbstractNodeInfo
      */
     virtual ~AbstractNodeInfo();
-
-    /**
-     * @brief sct This method return socket of connection.
-     * @return return socket of connection.
-     */
-    QAbstractSocket *sct() const;
 
     /**
      * @brief ban This node, set trust value to 0.
@@ -192,6 +189,34 @@ public:
      */
     void setSct(QAbstractSocket *sct);
 
+    /**
+     * @brief waitForConnected This method is wraper of the QAbstractSocket::waitForConnected method.
+     * @brief msec This is msec count of wait results.
+     * @return return true if the object is valid and socket is connected successful else false.
+     */
+    bool waitForConnected(int msec = 30000) const;
+
+    /**
+     * @brief errorString This method is wraper of the QAbstractSocket::errorString method.
+     * @return return string of the last socket error.
+     */
+    QString errorString();
+
+    /**
+     * @brief sendData This method sends @a array into remote host of this object.
+     * @param array This is data that will be sendet.
+     * @param await This is boolean option for waitin of result.
+     * @note This method will be executed on the own network thread.
+     * @return true if data sendet successful
+     */
+    bool sendData(const QByteArray &array, bool await);
+
+    /**
+     * @brief readAll This method is wraper of the QAbstractSocket::readAll method.
+     * @return return array of the available data.
+     */
+    QByteArray readAll() const;
+
 public slots:
     /**
      * @brief disconnectNetworkConnection This method disconnect device from host.
@@ -252,13 +277,19 @@ protected:
      */
     virtual bool confirmData() const;
 
-
 private:
+    /**
+     * @brief sendPackagePrivate This slot move send package to a main thread.
+     * @param array Bytes to send
+     * @return true if data sendet successful
+     */
+    bool sendPackagePrivate(QByteArray array) const;
 
     QHostInfo *_info = nullptr;
     HostAddress _networkAddress;
 
     QAbstractSocket *_sct = nullptr;
+    mutable QMutex _sctMutex;
     int _trust = static_cast<int>(TrustNode::Default);
     NodeCoonectionStatus _status = NodeCoonectionStatus::NotConnected;
     bool _isLocal = false;
